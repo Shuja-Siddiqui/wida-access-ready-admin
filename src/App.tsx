@@ -19,6 +19,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={AdminLogin} />
+      <Route path="/admin/login" component={AdminLogin} />
       <Route path="/" component={AdminDashboard} />
       <Route path="/districts/:districtId" component={AdminDistrictDetail} />
       <Route path="/districts" component={AdminDistricts} />

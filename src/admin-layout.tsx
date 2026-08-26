@@ -31,7 +31,7 @@ export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
   useEffect(() => {
     const { userType, token } = readLocalAuth();
     if (!token || userType !== "super_admin") {
-      window.location.href = "/admin/login";
+      window.location.href = "/login";
     } else {
       setAuthorized(true);
     }
@@ -42,7 +42,7 @@ export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
 
   function handleLogout() {
     logout();
-    window.location.href = "/admin/login";
+    window.location.href = "/login";
   }
 
   return (
