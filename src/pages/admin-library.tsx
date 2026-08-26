@@ -362,6 +362,7 @@ function UploadPanel({ onSuccess }: { onSuccess: () => void }) {
           description: description   || undefined,
           imageConcept: imageConcept.trim() || undefined,
           tags,
+          visionTags,
           contexts:    Array.from(contexts),
           topicIds:    Array.from(topicIds),
           // Include hand-curated detections if the admin edited boxes — skips DINO on server
@@ -887,6 +888,16 @@ function parseDetections(item: LibraryItem): AnnotateDetection[] {
     typeof (d as AnnotateDetection).label === "string" &&
     typeof (d as AnnotateDetection).box === "object",
   );
+}
+
+function parseVisionTags(item: LibraryItem): string[] {
+  const dr = item.detectionResults as { visionTags?: unknown } | null;
+  if (!Array.isArray(dr?.visionTags)) return [];
+  return [...new Set(
+    dr.visionTags
+      .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+      .map((t) => t.trim().toLowerCase()),
+  )];
 }
 
 type AnnotateModalProps =
@@ -2127,6 +2138,7 @@ export default function AdminLibrary() {
         <AnnotateModal
           mode="library"
           item={annotateItem}
+          suggestedLabels={parseVisionTags(annotateItem)}
           onClose={() => setAnnotateItem(null)}
           onSaved={refresh}
         />
