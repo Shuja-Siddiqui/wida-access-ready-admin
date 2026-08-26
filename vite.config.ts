@@ -9,8 +9,15 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${process.env.PORT}"`);
 }
 
-const basePath = process.env.BASE_PATH ?? "/admin/";
+const basePath = process.env.BASE_PATH ?? "/";
 const apiTarget = process.env.INTERNAL_PROXY_BASE_URL ?? "http://localhost:8080";
+
+const apiProxy = {
+  "/api": {
+    target: apiTarget,
+    changeOrigin: true,
+  },
+};
 
 export default defineConfig({
   base: basePath,
@@ -31,12 +38,7 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
-    proxy: {
-      "/api": {
-        target: apiTarget,
-        changeOrigin: true,
-      },
-    },
+    proxy: apiProxy,
     fs: {
       strict: true,
     },
@@ -45,5 +47,6 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    proxy: apiProxy,
   },
 });
