@@ -35,6 +35,17 @@ interface LibraryItem {
   contexts: string[];
   /** Specific concept depicted, e.g. "Chromosomes", "Westward Expansion" */
   imageConcept: string | null;
+  ingestSource: "admin_upload" | "image_factory";
+  generationBackend: "hf-inference" | "flux-sidecar" | null;
+}
+
+function ingestSourceLabel(item: LibraryItem): string {
+  if (item.ingestSource === "image_factory") {
+    if (item.generationBackend === "hf-inference") return "Image Factory (HF)";
+    if (item.generationBackend === "flux-sidecar") return "Image Factory (FLUX)";
+    return "Image Factory";
+  }
+  return "Manual upload";
 }
 
 interface LibraryResponse {
@@ -57,8 +68,8 @@ interface FlatTopic {
   id: string;
   name: string;
   slug: string;
-  themeId: string;
-  themeName: string;
+  contentCategoryId: string;
+  contentCategoryName: string;
   displayOrder: number;
 }
 
@@ -98,14 +109,14 @@ function ManageTopicsModal({
   // Load flat topics list
   const { data: topicsData, isLoading: topicsLoading } = useQuery<{ topics: FlatTopic[] }>({
     queryKey: ["admin-topics-flat"],
-    queryFn: () => apiRequest("/api/admin/topics"),
+    queryFn: () => apiRequest("/api/admin/library/topics"),
     staleTime: 60_000,
   });
 
   // Load current assignments for this image
   const { data: assignedData, isLoading: assignedLoading } = useQuery<{ topicIds: string[] }>({
-    queryKey: ["admin-library-topics", item.id],
-    queryFn: () => apiRequest(`/api/admin/library/${item.id}/topics`),
+    queryKey: ["admin-library-topic-assignments", item.id],
+    queryFn: () => apiRequest(`/api/admin/library/images/${item.id}/topic-assignments`),
   });
 
   // Initialise checkboxes once both loads are done
@@ -117,13 +128,13 @@ function ManageTopicsModal({
 
   const { mutate: save, isPending: saving } = useMutation({
     mutationFn: () =>
-      apiRequest(`/api/admin/library/${item.id}/topics`, {
+      apiRequest(`/api/admin/library/images/${item.id}/topic-assignments`, {
         method: "PUT",
         body: JSON.stringify({ topicIds: Array.from(selected) }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-library"] });
-      qc.invalidateQueries({ queryKey: ["admin-library-topics", item.id] });
+      qc.invalidateQueries({ queryKey: ["admin-library-topic-assignments", item.id] });
       onSaved();
       onClose();
     },
@@ -131,22 +142,22 @@ function ManageTopicsModal({
 
   const isLoading = topicsLoading || assignedLoading;
 
-  // Group by theme
-  const grouped = (topicsData?.topics ?? []).reduce<Record<string, { themeName: string; topics: FlatTopic[] }>>(
+  // Group by content category
+  const grouped = (topicsData?.topics ?? []).reduce<Record<string, { contentCategoryName: string; topics: FlatTopic[] }>>(
     (acc, t) => {
-      if (!acc[t.themeId]) acc[t.themeId] = { themeName: t.themeName, topics: [] };
-      acc[t.themeId]!.topics.push(t);
+      if (!acc[t.contentCategoryId]) acc[t.contentCategoryId] = { contentCategoryName: t.contentCategoryName, topics: [] };
+      acc[t.contentCategoryId]!.topics.push(t);
       return acc;
     },
     {},
   );
 
   const lc = search.toLowerCase();
-  const filteredGrouped = Object.entries(grouped).reduce<typeof grouped>((acc, [themeId, g]) => {
+  const filteredGrouped = Object.entries(grouped).reduce<typeof grouped>((acc, [categoryId, g]) => {
     const matched = g.topics.filter(
-      (t) => !lc || t.name.toLowerCase().includes(lc) || t.themeName.toLowerCase().includes(lc),
+      (t) => !lc || t.name.toLowerCase().includes(lc) || t.contentCategoryName.toLowerCase().includes(lc),
     );
-    if (matched.length) acc[themeId] = { themeName: g.themeName, topics: matched };
+    if (matched.length) acc[categoryId] = { contentCategoryName: g.contentCategoryName, topics: matched };
     return acc;
   }, {});
 
@@ -211,10 +222,10 @@ function ManageTopicsModal({
             <p className="text-sm text-muted-foreground text-center py-8">No topics found.</p>
           ) : (
             <div className="space-y-4">
-              {Object.values(filteredGrouped).map(({ themeName, topics }) => (
-                <div key={themeName}>
+              {Object.values(filteredGrouped).map(({ contentCategoryName, topics }) => (
+                <div key={contentCategoryName}>
                   <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    {themeName}
+                    {contentCategoryName}
                   </p>
                   <div className="space-y-1">
                     {topics.map((t) => {
@@ -296,7 +307,7 @@ function UploadPanel({ onSuccess }: { onSuccess: () => void }) {
   const [contexts, setContexts]       = useState<Set<string>>(new Set());
   const [topicIds, setTopicIds]           = useState<Set<string>>(new Set());
   const [pickerOpen, setPickerOpen]       = useState(false);
-  const [expandedThemes, setExpandedThemes] = useState<Set<string>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [aiDetected, setAiDetected]           = useState(false);
   const [detectError, setDetectError]         = useState<string | null>(null);
   const [uploadError, setUploadError]         = useState<string | null>(null);
@@ -307,18 +318,18 @@ function UploadPanel({ onSuccess }: { onSuccess: () => void }) {
   const [visionTags, setVisionTags]           = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Flat topics list — grouped by theme for picker + display
+  // Flat topics list — grouped by content category for picker + display
   const { data: topicsData } = useQuery<{ topics: FlatTopic[] }>({
     queryKey: ["admin-topics-flat"],
-    queryFn: () => apiRequest("/api/admin/topics"),
+    queryFn: () => apiRequest("/api/admin/library/topics"),
     staleTime: 5 * 60_000,
   });
   const topicsById = Object.fromEntries((topicsData?.topics ?? []).map((t) => [t.id, t]));
   const grouped = (topicsData?.topics ?? []).reduce<
-    Record<string, { themeId: string; themeName: string; topics: FlatTopic[] }>
+    Record<string, { contentCategoryId: string; contentCategoryName: string; topics: FlatTopic[] }>
   >((acc, t) => {
-    if (!acc[t.themeId]) acc[t.themeId] = { themeId: t.themeId, themeName: t.themeName, topics: [] };
-    acc[t.themeId]!.topics.push(t);
+    if (!acc[t.contentCategoryId]) acc[t.contentCategoryId] = { contentCategoryId: t.contentCategoryId, contentCategoryName: t.contentCategoryName, topics: [] };
+    acc[t.contentCategoryId]!.topics.push(t);
     return acc;
   }, {});
 
@@ -338,13 +349,13 @@ function UploadPanel({ onSuccess }: { onSuccess: () => void }) {
       setPendingDetections(data.detections ?? []);
       const suggested = new Set(data.suggestedTopicIds ?? []);
       setTopicIds(suggested);
-      // Auto-expand themes that have suggested topics
-      const themes = new Set(
+      // Auto-expand categories that have suggested topics
+      const categories = new Set(
         (data.suggestedTopicIds ?? [])
-          .map((id) => topicsById[id]?.themeId)
+          .map((id) => topicsById[id]?.contentCategoryId)
           .filter((id): id is string => !!id),
       );
-      setExpandedThemes(themes);
+      setExpandedCategories(categories);
       setAiDetected(true);
       setDetectError(null);
     },
@@ -372,7 +383,7 @@ function UploadPanel({ onSuccess }: { onSuccess: () => void }) {
     onSuccess: () => {
       setPreview(null); setDataUri(null); setFileName(null);
       setDescription(""); setImageConcept(""); setTagInput(""); setTags([]);
-      setContexts(new Set()); setTopicIds(new Set()); setPickerOpen(false); setExpandedThemes(new Set());
+      setContexts(new Set()); setTopicIds(new Set()); setPickerOpen(false); setExpandedCategories(new Set());
       setAiDetected(false); setDetectError(null); setUploadError(null);
       setPendingDetections([]); setShowAnnotate(false); setVisionTags([]);
       setSuccess(true);
@@ -395,7 +406,7 @@ function UploadPanel({ onSuccess }: { onSuccess: () => void }) {
   function clearImage() {
     setPreview(null); setDataUri(null); setFileName(null);
     setDescription(""); setImageConcept(""); setTags([]); setTagInput("");
-    setContexts(new Set()); setTopicIds(new Set()); setPickerOpen(false); setExpandedThemes(new Set());
+    setContexts(new Set()); setTopicIds(new Set()); setPickerOpen(false); setExpandedCategories(new Set());
     setAiDetected(false); setDetectError(null); setUploadError(null);
     setPendingDetections([]); setShowAnnotate(false); setVisionTags([]);
   }
@@ -698,7 +709,7 @@ function UploadPanel({ onSuccess }: { onSuccess: () => void }) {
               {/* Section header */}
               <div className="flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground">Theme &amp; Topics</span>
+                <span className="text-xs font-medium text-muted-foreground">Content category &amp; topics</span>
                 {aiDetected && topicIds.size > 0 && (
                   <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
                     style={{ background: "hsl(243,75%,59%,0.10)", color: "hsl(243,75%,49%)" }}>
@@ -716,16 +727,16 @@ function UploadPanel({ onSuccess }: { onSuccess: () => void }) {
                 </button>
               </div>
 
-              {/* Selected topics grouped by theme */}
+              {/* Selected topics grouped by content category */}
               {topicIds.size > 0 ? (
                 <div className="space-y-2">
-                  {Object.values(grouped).map(({ themeId, themeName, topics }) => {
+                  {Object.values(grouped).map(({ contentCategoryId, contentCategoryName, topics }) => {
                     const selected = topics.filter((t) => topicIds.has(t.id));
                     if (!selected.length) return null;
                     return (
-                      <div key={themeId} className="rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+                      <div key={contentCategoryId} className="rounded-lg border border-border bg-muted/20 px-3 py-2.5">
                         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                          {themeName}
+                          {contentCategoryName}
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {selected.map((t) => (
@@ -757,20 +768,20 @@ function UploadPanel({ onSuccess }: { onSuccess: () => void }) {
                 )
               )}
 
-              {/* Inline manual picker — accordion per theme */}
+              {/* Inline manual picker — accordion per content category */}
               {pickerOpen && (
                 <div className="rounded-lg border border-border overflow-hidden">
-                  {Object.values(grouped).map(({ themeId, themeName, topics }, idx) => {
-                    const isExpanded = expandedThemes.has(themeId);
+                  {Object.values(grouped).map(({ contentCategoryId, contentCategoryName, topics }, idx) => {
+                    const isExpanded = expandedCategories.has(contentCategoryId);
                     const selectedCount = topics.filter((t) => topicIds.has(t.id)).length;
                     return (
-                      <div key={themeId} className={idx > 0 ? "border-t border-border" : ""}>
-                        {/* Theme row */}
+                      <div key={contentCategoryId} className={idx > 0 ? "border-t border-border" : ""}>
+                        {/* Content category row */}
                         <button
                           onClick={() =>
-                            setExpandedThemes((prev) => {
+                            setExpandedCategories((prev) => {
                               const n = new Set(prev);
-                              n.has(themeId) ? n.delete(themeId) : n.add(themeId);
+                              n.has(contentCategoryId) ? n.delete(contentCategoryId) : n.add(contentCategoryId);
                               return n;
                             })
                           }
@@ -778,7 +789,7 @@ function UploadPanel({ onSuccess }: { onSuccess: () => void }) {
                           className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-muted/40 transition-colors cursor-pointer disabled:cursor-not-allowed"
                         >
                           <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform shrink-0 ${isExpanded ? "rotate-180" : ""}`} />
-                          <span className="text-xs font-semibold text-foreground flex-1 text-left">{themeName}</span>
+                          <span className="text-xs font-semibold text-foreground flex-1 text-left">{contentCategoryName}</span>
                           {selectedCount > 0 && (
                             <span className="text-[10px] font-medium rounded-full px-1.5 py-0.5"
                               style={{ background: "hsl(262,60%,94%)", color: "hsl(262,45%,38%)" }}>
@@ -965,6 +976,19 @@ function AnnotateModal(props: AnnotateModalProps) {
         : Promise.resolve(),
     onSuccess: () => {
       if (props.mode === "library") { props.onSaved(); props.onClose(); }
+    },
+  });
+
+  const { mutate: runDino, isPending: dinoRunning } = useMutation({
+    mutationFn: () => {
+      if (props.mode !== "library") return Promise.reject(new Error("Not a library item"));
+      return apiRequest<{ detections: AnnotateDetection[]; tags: string[] }>(
+        `/api/admin/library/${props.item.id}/run-dino`,
+        { method: "POST" },
+      );
+    },
+    onSuccess: (data) => {
+      setBoxes(data.detections ?? []);
     },
   });
 
@@ -1548,6 +1572,22 @@ function AnnotateModal(props: AnnotateModalProps) {
                     Drag on the image to draw a bounding box, then give it a label.
                   </p>
                 </div>
+                {props.mode === "library" && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={dinoRunning}
+                    onClick={() => runDino()}
+                  >
+                    {dinoRunning ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Crosshair className="w-4 h-4 mr-2" />
+                    )}
+                    Run DINO on this image
+                  </Button>
+                )}
               </div>
             )}
 
@@ -1832,6 +1872,14 @@ function ImageCard({
           </div>
         ) : (
           <>
+            <div className="absolute top-2 left-2 z-10">
+              <span
+                className="inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-medium shadow-sm bg-black/55 text-white"
+                title="How this image entered the library"
+              >
+                {ingestSourceLabel(item)}
+              </span>
+            </div>
             {/* Normal hover overlay + action buttons */}
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
             <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">

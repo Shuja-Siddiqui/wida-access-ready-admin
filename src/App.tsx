@@ -9,9 +9,11 @@ import AdminDistricts from "@/pages/admin-districts";
 import AdminUsers from "@/pages/admin-users";
 import AdminSubscriptions from "@/pages/admin-subscriptions";
 import AdminPricing from "@/pages/admin-pricing";
+import AdminRateLimit from "@/pages/admin-rate-limit";
 import AdminDistrictDetail from "@/pages/admin-district-detail";
 import AdminLibrary from "@/pages/admin-library";
 import AdminThemes  from "@/pages/admin-themes";
+import AdminImageFactory from "@/pages/admin-image-factory";
 
 const queryClient = new QueryClient();
 
@@ -26,8 +28,10 @@ function Router() {
       <Route path="/users" component={AdminUsers} />
       <Route path="/subscriptions" component={AdminSubscriptions} />
       <Route path="/pricing" component={AdminPricing} />
+      <Route path="/rate-limit" component={AdminRateLimit} />
       <Route path="/library" component={AdminLibrary} />
-      <Route path="/themes"  component={AdminThemes} />
+      <Route path="/library/catalog" component={AdminThemes} />
+      <Route path="/images/factory" component={AdminImageFactory} />
       <Route component={NotFound} />
     </Switch>
   );
