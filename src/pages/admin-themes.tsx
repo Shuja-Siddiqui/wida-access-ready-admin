@@ -12,12 +12,12 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface Theme {
+interface ContentCategory {
   id: string; name: string; slug: string; description: string | null;
   displayOrder: number; isActive: boolean; createdAt: string; topicCount: number;
 }
 interface Topic {
-  id: string; themeId: string; name: string; slug: string;
+  id: string; contentCategoryId: string; name: string; slug: string;
   description: string | null; displayOrder: number; isActive: boolean;
   createdAt: string; imageCount: number;
 }
@@ -135,9 +135,9 @@ function LibraryPicker({
 
   const { mutate: assign, isPending } = useMutation({
     mutationFn: () =>
-      apiRequest(`/api/admin/topics/${topicId}/images`, {
+      apiRequest(`/api/admin/library/topics/${topicId}/images`, {
         method: "POST",
-        body: JSON.stringify({ libraryIds: [...selected] }),
+        body: JSON.stringify({ libraryImageIds: [...selected] }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["topic-images", topicId] });
@@ -278,21 +278,21 @@ function LibraryPicker({
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type View = "themes" | "topics" | "images";
+type View = "categories" | "topics" | "images";
 
 export default function AdminThemes() {
   const qc = useQueryClient();
 
   // Navigation state
-  const [view, setView]               = useState<View>("themes");
-  const [selectedTheme, setSelectedTheme] = useState<Theme | null>(null);
+  const [view, setView]               = useState<View>("categories");
+  const [selectedCategory, setSelectedCategory] = useState<ContentCategory | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
 
   // Modal states
-  const [themeModal, setThemeModal]   = useState<{ mode: "create" | "edit"; theme?: Theme } | null>(null);
+  const [categoryModal, setCategoryModal]   = useState<{ mode: "create" | "edit"; category?: ContentCategory } | null>(null);
   const [topicModal, setTopicModal]   = useState<{ mode: "create" | "edit"; topic?: Topic } | null>(null);
   const [showPicker, setShowPicker]   = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ kind: "theme" | "topic"; id: string; name: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ kind: "category" | "topic"; id: string; name: string } | null>(null);
 
   // Form fields
   const [formName, setFormName]         = useState("");
@@ -304,20 +304,20 @@ export default function AdminThemes() {
 
   // ── Queries ─────────────────────────────────────────────────────────────────
 
-  const { data: themesData, isLoading: themesLoading } = useQuery<{ themes: Theme[] }>({
-    queryKey: ["themes"],
-    queryFn:  () => apiRequest("/api/admin/themes"),
+  const { data: categoriesData, isLoading: categoriesLoading } = useQuery<{ contentCategories: ContentCategory[] }>({
+    queryKey: ["content-categories"],
+    queryFn:  () => apiRequest("/api/admin/library/content-categories"),
   });
 
   const { data: topicsData, isLoading: topicsLoading } = useQuery<{ topics: Topic[] }>({
-    queryKey: ["topics", selectedTheme?.id],
-    queryFn:  () => apiRequest(`/api/admin/themes/${selectedTheme!.id}/topics`),
-    enabled:  !!selectedTheme,
+    queryKey: ["library-topics", selectedCategory?.id],
+    queryFn:  () => apiRequest(`/api/admin/library/content-categories/${selectedCategory!.id}/topics`),
+    enabled:  !!selectedCategory,
   });
 
   const { data: imagesData, isLoading: imagesLoading } = useQuery<{ items: AssignedImage[]; total: number }>({
     queryKey: ["topic-images", selectedTopic?.id, imgOffset],
-    queryFn:  () => apiRequest(`/api/admin/topics/${selectedTopic!.id}/images?limit=20&offset=${imgOffset}`),
+    queryFn:  () => apiRequest(`/api/admin/library/topics/${selectedTopic!.id}/images?limit=20&offset=${imgOffset}`),
     enabled:  !!selectedTopic,
   });
 
@@ -325,13 +325,13 @@ export default function AdminThemes() {
 
   // ── Mutations ────────────────────────────────────────────────────────────────
 
-  function openThemeCreate() {
+  function openCategoryCreate() {
     setFormName(""); setFormDesc(""); setFormError(null);
-    setThemeModal({ mode: "create" });
+    setCategoryModal({ mode: "create" });
   }
-  function openThemeEdit(theme: Theme) {
-    setFormName(theme.name); setFormDesc(theme.description ?? ""); setFormError(null);
-    setThemeModal({ mode: "edit", theme });
+  function openCategoryEdit(category: ContentCategory) {
+    setFormName(category.name); setFormDesc(category.description ?? ""); setFormError(null);
+    setCategoryModal({ mode: "edit", category });
   }
   function openTopicCreate() {
     setFormName(""); setFormDesc(""); setFormError(null);
@@ -342,32 +342,32 @@ export default function AdminThemes() {
     setTopicModal({ mode: "edit", topic });
   }
 
-  const { mutate: saveTheme, isPending: savingTheme } = useMutation({
-    mutationFn: () => themeModal?.mode === "create"
-      ? apiRequest("/api/admin/themes", { method: "POST", body: JSON.stringify({ name: formName, description: formDesc || undefined }) })
-      : apiRequest(`/api/admin/themes/${themeModal!.theme!.id}`, { method: "PATCH", body: JSON.stringify({ name: formName, description: formDesc || undefined }) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["themes"] }); setThemeModal(null); },
+  const { mutate: saveCategory, isPending: savingCategory } = useMutation({
+    mutationFn: () => categoryModal?.mode === "create"
+      ? apiRequest("/api/admin/library/content-categories", { method: "POST", body: JSON.stringify({ name: formName, description: formDesc || undefined }) })
+      : apiRequest(`/api/admin/library/content-categories/${categoryModal!.category!.id}`, { method: "PATCH", body: JSON.stringify({ name: formName, description: formDesc || undefined }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["content-categories"] }); setCategoryModal(null); },
     onError:   (err) => setFormError(err instanceof ApiError ? err.message : "Save failed"),
   });
 
   const { mutate: saveTopic, isPending: savingTopic } = useMutation({
     mutationFn: () => topicModal?.mode === "create"
-      ? apiRequest(`/api/admin/themes/${selectedTheme!.id}/topics`, { method: "POST", body: JSON.stringify({ name: formName, description: formDesc || undefined }) })
-      : apiRequest(`/api/admin/topics/${topicModal!.topic!.id}`, { method: "PATCH", body: JSON.stringify({ name: formName, description: formDesc || undefined }) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["topics", selectedTheme?.id] }); setTopicModal(null); },
+      ? apiRequest(`/api/admin/library/content-categories/${selectedCategory!.id}/topics`, { method: "POST", body: JSON.stringify({ name: formName, description: formDesc || undefined }) })
+      : apiRequest(`/api/admin/library/topics/${topicModal!.topic!.id}`, { method: "PATCH", body: JSON.stringify({ name: formName, description: formDesc || undefined }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["library-topics", selectedCategory?.id] }); setTopicModal(null); },
     onError:   (err) => setFormError(err instanceof ApiError ? err.message : "Save failed"),
   });
 
   const { mutate: confirmDelete, isPending: deleting } = useMutation({
-    mutationFn: () => deleteConfirm!.kind === "theme"
-      ? apiRequest(`/api/admin/themes/${deleteConfirm!.id}`, { method: "DELETE" })
-      : apiRequest(`/api/admin/topics/${deleteConfirm!.id}`, { method: "DELETE" }),
+    mutationFn: () => deleteConfirm!.kind === "category"
+      ? apiRequest(`/api/admin/library/content-categories/${deleteConfirm!.id}`, { method: "DELETE" })
+      : apiRequest(`/api/admin/library/topics/${deleteConfirm!.id}`, { method: "DELETE" }),
     onSuccess: () => {
-      if (deleteConfirm!.kind === "theme") {
-        qc.invalidateQueries({ queryKey: ["themes"] });
-        if (selectedTheme?.id === deleteConfirm!.id) { setSelectedTheme(null); setView("themes"); }
+      if (deleteConfirm!.kind === "category") {
+        qc.invalidateQueries({ queryKey: ["content-categories"] });
+        if (selectedCategory?.id === deleteConfirm!.id) { setSelectedCategory(null); setView("categories"); }
       } else {
-        qc.invalidateQueries({ queryKey: ["topics", selectedTheme?.id] });
+        qc.invalidateQueries({ queryKey: ["library-topics", selectedCategory?.id] });
         if (selectedTopic?.id === deleteConfirm!.id) { setSelectedTopic(null); setView("topics"); }
       }
       setDeleteConfirm(null);
@@ -376,22 +376,22 @@ export default function AdminThemes() {
 
   const { mutate: removeImage } = useMutation({
     mutationFn: (libraryId: string) =>
-      apiRequest(`/api/admin/topics/${selectedTopic!.id}/images/${libraryId}`, { method: "DELETE" }),
+      apiRequest(`/api/admin/library/topics/${selectedTopic!.id}/images/${libraryId}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["topic-images", selectedTopic?.id] });
-      qc.invalidateQueries({ queryKey: ["topics", selectedTheme?.id] });
+      qc.invalidateQueries({ queryKey: ["library-topics", selectedCategory?.id] });
     },
   });
 
   // ── Navigation helpers ───────────────────────────────────────────────────────
 
-  function selectTheme(theme: Theme) {
-    setSelectedTheme(theme); setSelectedTopic(null); setImgOffset(0); setView("topics");
+  function selectCategory(category: ContentCategory) {
+    setSelectedCategory(category); setSelectedTopic(null); setImgOffset(0); setView("topics");
   }
   function selectTopic(topic: Topic) {
     setSelectedTopic(topic); setImgOffset(0); setView("images");
   }
-  function goToThemes() { setView("themes"); setSelectedTheme(null); setSelectedTopic(null); }
+  function goToCategories() { setView("categories"); setSelectedCategory(null); setSelectedTopic(null); }
   function goToTopics() { setView("topics"); setSelectedTopic(null); setImgOffset(0); }
 
   const imgTotalPages  = imagesData ? Math.ceil(imagesData.total / 20) : 1;
@@ -401,21 +401,21 @@ export default function AdminThemes() {
 
   return (
     <AdminLayout
-      title="Themes & Topics"
-      subtitle="Organise library images into a Theme → Topic hierarchy for content generation."
+      title="Library Catalog"
+      subtitle="Organise library images into Content Category → Topic hierarchy for content generation."
     >
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-5">
-        <button onClick={goToThemes}
-          className={`hover:text-foreground transition-colors cursor-pointer ${view === "themes" ? "text-foreground font-medium" : ""}`}>
-          Themes
+        <button onClick={goToCategories}
+          className={`hover:text-foreground transition-colors cursor-pointer ${view === "categories" ? "text-foreground font-medium" : ""}`}>
+          Content Categories
         </button>
-        {selectedTheme && (
+        {selectedCategory && (
           <>
             <ChevronRight className="w-3.5 h-3.5 opacity-40" />
             <button onClick={goToTopics}
               className={`hover:text-foreground transition-colors cursor-pointer ${view === "topics" ? "text-foreground font-medium" : ""}`}>
-              {selectedTheme.name}
+              {selectedCategory.name}
             </button>
           </>
         )}
@@ -427,18 +427,18 @@ export default function AdminThemes() {
         )}
       </nav>
 
-      {/* ── Level 1: Themes ──────────────────────────────────────────────────── */}
-      {view === "themes" && (
+      {/* ── Level 1: Content categories ──────────────────────────────────────── */}
+      {view === "categories" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">{themesData?.themes.length ?? 0} themes</p>
-            <Button size="sm" onClick={openThemeCreate}
+            <p className="text-sm text-muted-foreground">{categoriesData?.contentCategories.length ?? 0} content categories</p>
+            <Button size="sm" onClick={openCategoryCreate}
               className="gap-2 text-sm cursor-pointer" style={{ background: "hsl(243,75%,59%)", color: "white" }}>
-              <Plus className="w-3.5 h-3.5" /> New Theme
+              <Plus className="w-3.5 h-3.5" /> New Category
             </Button>
           </div>
 
-          {themesLoading ? (
+          {categoriesLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="h-28 rounded-xl bg-muted animate-pulse" />
@@ -446,14 +446,14 @@ export default function AdminThemes() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {themesData?.themes.map((theme) => {
-                const c = themeColor(theme.slug);
+              {categoriesData?.contentCategories.map((category) => {
+                const c = themeColor(category.slug);
                 const Icon = c.icon;
                 return (
-                  <div key={theme.id}
+                  <div key={category.id}
                     className="relative group rounded-xl border p-4 cursor-pointer hover:shadow-md transition-all"
                     style={{ background: c.bg, borderColor: c.border }}
-                    onClick={() => selectTheme(theme)}
+                    onClick={() => selectCategory(category)}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2.5">
@@ -462,29 +462,29 @@ export default function AdminThemes() {
                           <Icon className="w-4 h-4" style={{ color: c.text }} />
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-foreground leading-tight">{theme.name}</p>
+                          <p className="text-sm font-semibold text-foreground leading-tight">{category.name}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {theme.topicCount} topic{theme.topicCount !== 1 ? "s" : ""}
+                            {category.topicCount} topic{category.topicCount !== 1 ? "s" : ""}
                           </p>
                         </div>
                       </div>
                       {/* Action buttons — visible on hover */}
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                         onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => openThemeEdit(theme)}
+                        <button onClick={() => openCategoryEdit(category)}
                           className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-white/50 transition-colors cursor-pointer">
                           <Pencil className="w-3 h-3" />
                         </button>
-                        <button onClick={() => setDeleteConfirm({ kind: "theme", id: theme.id, name: theme.name })}
+                        <button onClick={() => setDeleteConfirm({ kind: "category", id: category.id, name: category.name })}
                           className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer">
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
                     </div>
-                    {theme.description && (
-                      <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{theme.description}</p>
+                    {category.description && (
+                      <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{category.description}</p>
                     )}
-                    {!theme.isActive && (
+                    {!category.isActive && (
                       <span className="mt-2 inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                         Inactive
                       </span>
@@ -499,11 +499,11 @@ export default function AdminThemes() {
       )}
 
       {/* ── Level 2: Topics ──────────────────────────────────────────────────── */}
-      {view === "topics" && selectedTheme && (
+      {view === "topics" && selectedCategory && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              {topicsData?.topics.length ?? 0} topics in <span className="font-medium text-foreground">{selectedTheme.name}</span>
+              {topicsData?.topics.length ?? 0} topics in <span className="font-medium text-foreground">{selectedCategory.name}</span>
             </p>
             <Button size="sm" onClick={openTopicCreate}
               className="gap-2 text-sm cursor-pointer" style={{ background: "hsl(243,75%,59%)", color: "white" }}>
@@ -658,17 +658,17 @@ export default function AdminThemes() {
         </div>
       )}
 
-      {/* ── Theme form modal ─────────────────────────────────────────────────── */}
-      {themeModal && (
+      {/* ── Content category form modal ──────────────────────────────────────── */}
+      {categoryModal && (
         <FormModal
-          title={themeModal.mode === "create" ? "New Theme" : "Edit Theme"}
+          title={categoryModal.mode === "create" ? "New Content Category" : "Edit Content Category"}
           fields={[
             { label: "Name", name: "name", value: formName, onChange: setFormName, placeholder: "e.g. Arts and Culture" },
-            { label: "Description (optional)", name: "desc", value: formDesc, onChange: setFormDesc, multiline: true, placeholder: "Brief description of this theme…" },
+            { label: "Description (optional)", name: "desc", value: formDesc, onChange: setFormDesc, multiline: true, placeholder: "Brief description of this category…" },
           ]}
-          onSubmit={saveTheme}
-          onClose={() => setThemeModal(null)}
-          isPending={savingTheme}
+          onSubmit={saveCategory}
+          onClose={() => setCategoryModal(null)}
+          isPending={savingCategory}
           error={formError}
         />
       )}
@@ -676,7 +676,7 @@ export default function AdminThemes() {
       {/* ── Topic form modal ─────────────────────────────────────────────────── */}
       {topicModal && (
         <FormModal
-          title={topicModal.mode === "create" ? `New Topic in "${selectedTheme?.name}"` : "Edit Topic"}
+          title={topicModal.mode === "create" ? `New Topic in "${selectedCategory?.name}"` : "Edit Topic"}
           fields={[
             { label: "Name", name: "name", value: formName, onChange: setFormName, placeholder: "e.g. Classroom" },
             { label: "Description (optional)", name: "desc", value: formDesc, onChange: setFormDesc, multiline: true, placeholder: "Brief description…" },
@@ -696,7 +696,7 @@ export default function AdminThemes() {
             <h3 className="text-sm font-semibold text-foreground mb-2">Delete {deleteConfirm.kind}?</h3>
             <p className="text-sm text-muted-foreground mb-5">
               <span className="font-medium text-foreground">"{deleteConfirm.name}"</span> will be permanently deleted.
-              {deleteConfirm.kind === "theme" && " All its topics and image assignments will be removed too."}
+              {deleteConfirm.kind === "category" && " All its topics and image assignments will be removed too."}
               {deleteConfirm.kind === "topic" && " All image assignments for this topic will be removed too."}
             </p>
             <div className="flex gap-2 justify-end">

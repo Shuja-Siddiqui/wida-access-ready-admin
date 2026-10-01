@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, Building2, Users, CreditCard,
-  DollarSign, LogOut, ChevronRight, Shield, Images, Layers,
+  DollarSign, LogOut, ChevronRight,   Shield, Images, Layers, Gauge, Factory,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { readLocalAuth, logout } from "@/lib/api";
@@ -13,8 +13,10 @@ const NAV_ITEMS = [
   { label: "Users",         path: "/users",        icon: Users },
   { label: "Subscriptions", path: "/subscriptions",icon: CreditCard },
   { label: "Pricing",       path: "/pricing",      icon: DollarSign },
+  { label: "API limits",    path: "/rate-limit",   icon: Gauge },
   { label: "Image Library", path: "/library",      icon: Images },
-  { label: "Themes & Topics", path: "/themes",    icon: Layers },
+  { label: "Library Catalog", path: "/library/catalog", icon: Layers },
+  { label: "Image Factory", path: "/images/factory", icon: Factory },
 ];
 
 interface AdminLayoutProps {

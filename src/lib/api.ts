@@ -23,7 +23,12 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   const res = await fetch(`${BASE}${path}`, { ...init, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError((body as { error?: string }).error ?? res.statusText, res.status);
+    const message = (body as { error?: string }).error ?? res.statusText;
+    if (res.status === 401 && !path.includes("/auth/login")) {
+      logout();
+      window.location.href = "/login";
+    }
+    throw new ApiError(message, res.status);
   }
   const json = await res.json() as { success?: boolean; data?: T } | T;
   if (json && typeof json === "object" && "success" in json && "data" in json) {
