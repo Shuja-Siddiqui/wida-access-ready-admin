@@ -5,13 +5,18 @@ import { apiRequest } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Coins, RefreshCw, ChevronLeft, ChevronRight, Zap, ArrowDownToLine, ArrowUpFromLine,
+  Coins, RefreshCw, ChevronLeft, ChevronRight, Zap, ArrowDownToLine, ArrowUpFromLine, Image,
 } from "lucide-react";
 
 interface AiUsageCall {
   id: string;
-  studentId: string;
+  studentId: string | null;
   studentName: string | null;
+  userId: string | null;
+  userName: string | null;
+  actorName: string | null;
+  actorType: "student" | "admin" | null;
+  imageJobId: string | null;
   sessionId: string | null;
   sessionDomain: string | null;
   callKind: string;
@@ -83,13 +88,52 @@ interface SessionsResponse {
   pagination: { page: number; limit: number; total: number; totalPages: number };
 }
 
+interface ImageFactoryJobRow {
+  jobId: string;
+  subject: string;
+  level: number;
+  complexityStep: number;
+  keyUse: string | null;
+  imageConcept: string | null;
+  status: string;
+  createdAt: string;
+  createdByName: string | null;
+  createdByEmail: string | null;
+  tokenTracked: boolean;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  model: string | null;
+  totalCostUsd: number;
+  priced: boolean;
+}
+
+interface ImageFactoryResponse {
+  jobs: ImageFactoryJobRow[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+  pageSummary: {
+    jobCount: number;
+    trackedPrompts: number;
+    totalTokens: number;
+    totalCostUsd: number;
+  };
+}
+
 const CALL_KIND_LABELS: Record<string, string> = {
   content_generate: "Content generation",
   item_feedback:    "Item feedback",
   attempt_feedback: "Session feedback",
   feedback:         "Writing feedback",
+  image_factory:    "Image prompt",
   speech:           "Speech",
   other:            "Other",
+};
+
+const IMAGE_FACTORY_STATUS_LABELS: Record<string, string> = {
+  prompt_ready: "Prompt ready",
+  generated:    "Image generated",
+  ingested:     "In library",
+  failed:       "Failed",
 };
 
 function fmtUsd(n: number): string {
@@ -135,6 +179,7 @@ export default function AdminAiUsage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [sessionsPage, setSessionsPage] = useState(1);
+  const [imageFactoryPage, setImageFactoryPage] = useState(1);
   const [callKind, setCallKind] = useState("");
   const [sessionId, setSessionId] = useState("");
 
@@ -163,6 +208,11 @@ export default function AdminAiUsage() {
     queryFn: () => apiRequest(`/api/admin/ai-usage/sessions?page=${sessionsPage}&limit=25`),
   });
 
+  const { data: imageFactoryData, isLoading: imageFactoryLoading } = useQuery<ImageFactoryResponse>({
+    queryKey: ["admin-ai-usage-image-factory", imageFactoryPage],
+    queryFn: () => apiRequest(`/api/admin/ai-usage/image-factory?page=${imageFactoryPage}&limit=25`),
+  });
+
   const { data: pricing } = useQuery<PricingResponse>({
     queryKey: ["admin-ai-usage-pricing"],
     queryFn: () => apiRequest("/api/admin/ai-usage/pricing"),
@@ -175,6 +225,7 @@ export default function AdminAiUsage() {
       qc.invalidateQueries({ queryKey: ["admin-ai-usage-summary"] });
       qc.invalidateQueries({ queryKey: ["admin-ai-usage-calls"] });
       qc.invalidateQueries({ queryKey: ["admin-ai-usage-sessions"] });
+      qc.invalidateQueries({ queryKey: ["admin-ai-usage-image-factory"] });
       toast({ title: "Model pricing refreshed" });
     },
     onError: () => toast({ title: "Could not refresh pricing", variant: "destructive" }),
@@ -182,6 +233,7 @@ export default function AdminAiUsage() {
 
   const pagination = callsData?.pagination;
   const sessionsPagination = sessionsData?.pagination;
+  const imageFactoryPagination = imageFactoryData?.pagination;
 
   function selectSession(id: string) {
     setSessionId(id);
@@ -367,6 +419,106 @@ export default function AdminAiUsage() {
           )}
         </div>
 
+        {/* Image factory prompt usage */}
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <Image className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-sm font-medium">Image factory — Claude prompt usage</h3>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Super-admin image prompt generation (HF pipeline step 1)
+              </p>
+            </div>
+            {imageFactoryData?.pageSummary && (
+              <span className="text-xs text-muted-foreground">
+                Page: {fmtTokens(imageFactoryData.pageSummary.totalTokens)} tokens · {fmtUsd(imageFactoryData.pageSummary.totalCostUsd)}
+              </span>
+            )}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[900px]">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
+                  <th className="px-3 py-2 font-medium">Time</th>
+                  <th className="px-3 py-2 font-medium">Admin</th>
+                  <th className="px-3 py-2 font-medium">Subject</th>
+                  <th className="px-3 py-2 font-medium">Level</th>
+                  <th className="px-3 py-2 font-medium">Concept</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium text-right">Tokens</th>
+                  <th className="px-3 py-2 font-medium text-right">Est. cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {imageFactoryLoading ? (
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>
+                ) : !imageFactoryData?.jobs.length ? (
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No image prompt jobs yet</td></tr>
+                ) : (
+                  imageFactoryData.jobs.map((job) => (
+                    <tr key={job.jobId} className="border-b border-border last:border-0 hover:bg-muted/20">
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-muted-foreground">
+                        {fmtTime(job.createdAt)}
+                      </td>
+                      <td className="px-3 py-2 max-w-[140px] truncate" title={job.createdByName ?? job.createdByEmail ?? undefined}>
+                        {job.createdByName ?? job.createdByEmail ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 capitalize text-xs">{job.subject.replace(/_/g, " ")}</td>
+                      <td className="px-3 py-2 text-xs tabular-nums">
+                        L{job.level}
+                        <span className="block text-[10px] text-muted-foreground">step {job.complexityStep}</span>
+                      </td>
+                      <td className="px-3 py-2 max-w-[180px] truncate text-xs" title={job.imageConcept ?? undefined}>
+                        {job.imageConcept ?? "—"}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="text-xs">{IMAGE_FACTORY_STATUS_LABELS[job.status] ?? job.status}</span>
+                        {!job.tokenTracked && (
+                          <span className="block text-[10px] text-muted-foreground">No token row</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-xs">
+                        {job.tokenTracked ? fmtTokens(job.totalTokens) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-xs font-medium">
+                        {job.tokenTracked ? fmtUsd(job.totalCostUsd) : "—"}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {imageFactoryPagination && imageFactoryPagination.totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+              <p className="text-xs text-muted-foreground">
+                {imageFactoryPagination.total.toLocaleString()} jobs · page {imageFactoryPagination.page} of {imageFactoryPagination.totalPages}
+              </p>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  disabled={imageFactoryPage <= 1}
+                  onClick={() => setImageFactoryPage((p) => p - 1)}
+                  className="p-1.5 rounded border border-border disabled:opacity-40 hover:bg-muted"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={imageFactoryPage >= imageFactoryPagination.totalPages}
+                  onClick={() => setImageFactoryPage((p) => p + 1)}
+                  className="p-1.5 rounded border border-border disabled:opacity-40 hover:bg-muted"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* By model breakdown */}
         {summary?.byModel && summary.byModel.length > 0 && (
           <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -440,7 +592,7 @@ export default function AdminAiUsage() {
                 <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
                   <th className="px-3 py-2 font-medium">Time</th>
                   <th className="px-3 py-2 font-medium">Type</th>
-                  <th className="px-3 py-2 font-medium">Student</th>
+                  <th className="px-3 py-2 font-medium">Actor</th>
                   <th className="px-3 py-2 font-medium">Model</th>
                   <th className="px-3 py-2 font-medium text-right">
                     <span className="inline-flex items-center gap-1 justify-end"><ArrowDownToLine className="w-3 h-3" />In</span>
@@ -470,8 +622,11 @@ export default function AdminAiUsage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 max-w-[140px] truncate" title={call.studentName ?? call.studentId}>
-                        {call.studentName ?? call.studentId.slice(0, 8)}
+                      <td className="px-3 py-2 max-w-[140px] truncate" title={call.actorName ?? undefined}>
+                        {call.actorType === "admin" && (
+                          <span className="block text-[10px] text-muted-foreground uppercase tracking-wide">Admin</span>
+                        )}
+                        {call.actorName ?? (call.studentId ?? call.userId ?? "—").slice(0, 8)}
                       </td>
                       <td className="px-3 py-2">
                         <span className="font-mono text-xs">{call.model ?? "—"}</span>
