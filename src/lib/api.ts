@@ -24,7 +24,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
     const message = (body as { error?: string }).error ?? res.statusText;
-    if (res.status === 401 && !path.includes("/auth/login")) {
+    if ((res.status === 401 || res.status === 403) && !path.includes("/auth/")) {
       logout();
       window.location.href = "/login";
     }

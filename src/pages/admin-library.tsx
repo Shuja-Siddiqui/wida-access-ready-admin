@@ -287,7 +287,6 @@ function ManageTopicsModal({
 // ── Context options ───────────────────────────────────────────────────────────
 
 const CONTEXT_OPTIONS = [
-  { value: "general",                label: "Everyday Topics",  desc: "General social listening (school, food, health…)" },
   { value: "academic:math",          label: "Mathematics",      desc: "Counting, measurement, word problems" },
   { value: "academic:science",       label: "Science",          desc: "Tools, natural objects, phenomena" },
   { value: "academic:social_studies",label: "Social Studies",   desc: "Maps, flags, historical places" },

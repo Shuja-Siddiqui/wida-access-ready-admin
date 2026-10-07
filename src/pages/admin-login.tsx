@@ -1,12 +1,8 @@
 import { useState, FormEvent } from "react";
 import { useLocation } from "wouter";
-import { apiRequest, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { loginSuperAdmin, persistAdminSession } from "@/lib/admin-auth";
 import { Shield, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
-
-interface LoginResponse {
-  token: string;
-  userType: string;
-}
 
 export default function AdminLogin() {
   const [, setLocation] = useLocation();
@@ -21,22 +17,13 @@ export default function AdminLogin() {
     setError("");
     setLoading(true);
     try {
-      const res = await apiRequest<LoginResponse>("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password, role: "administrator" }),
-      });
-      const { token, userType } = res;
-      if (userType !== "super_admin") {
-        setError("This portal is restricted to super admins only.");
-        return;
-      }
-      localStorage.setItem("authToken", token);
-      localStorage.setItem("userType", userType);
+      const res = await loginSuperAdmin(email, password);
+      persistAdminSession(res);
       setLocation("/");
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 401) setError("Incorrect email or password.");
-        else if (err.status === 403) setError("Please verify your email before signing in.");
+        else if (err.status === 403) setError("This portal is restricted to super admins only.");
         else setError(err.message || "Sign in failed. Please try again.");
       } else {
         setError("Something went wrong. Please try again.");
