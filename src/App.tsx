@@ -14,24 +14,35 @@ import AdminDistrictDetail from "@/pages/admin-district-detail";
 import AdminLibrary from "@/pages/admin-library";
 import AdminThemes  from "@/pages/admin-themes";
 import AdminImageFactory from "@/pages/admin-image-factory";
+import AdminAiUsage from "@/pages/admin-ai-usage";
+import { AdminProtectedRoute } from "@/components/admin-protected-route";
 
 const queryClient = new QueryClient();
+
+function Protected({ component: Page }: { component: React.ComponentType }) {
+  return (
+    <AdminProtectedRoute>
+      <Page />
+    </AdminProtectedRoute>
+  );
+}
 
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={AdminLogin} />
       <Route path="/admin/login" component={AdminLogin} />
-      <Route path="/" component={AdminDashboard} />
-      <Route path="/districts/:districtId" component={AdminDistrictDetail} />
-      <Route path="/districts" component={AdminDistricts} />
-      <Route path="/users" component={AdminUsers} />
-      <Route path="/subscriptions" component={AdminSubscriptions} />
-      <Route path="/pricing" component={AdminPricing} />
-      <Route path="/rate-limit" component={AdminRateLimit} />
-      <Route path="/library" component={AdminLibrary} />
-      <Route path="/library/catalog" component={AdminThemes} />
-      <Route path="/images/factory" component={AdminImageFactory} />
+      <Route path="/" component={() => <Protected component={AdminDashboard} />} />
+      <Route path="/districts/:districtId" component={() => <Protected component={AdminDistrictDetail} />} />
+      <Route path="/districts" component={() => <Protected component={AdminDistricts} />} />
+      <Route path="/users" component={() => <Protected component={AdminUsers} />} />
+      <Route path="/subscriptions" component={() => <Protected component={AdminSubscriptions} />} />
+      <Route path="/pricing" component={() => <Protected component={AdminPricing} />} />
+      <Route path="/rate-limit" component={() => <Protected component={AdminRateLimit} />} />
+      <Route path="/library" component={() => <Protected component={AdminLibrary} />} />
+      <Route path="/library/catalog" component={() => <Protected component={AdminThemes} />} />
+      <Route path="/images/factory" component={() => <Protected component={AdminImageFactory} />} />
+      <Route path="/ai-usage" component={() => <Protected component={AdminAiUsage} />} />
       <Route component={NotFound} />
     </Switch>
   );

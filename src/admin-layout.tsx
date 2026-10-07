@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
 import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, Building2, Users, CreditCard,
-  DollarSign, LogOut, ChevronRight,   Shield, Images, Layers, Gauge, Factory,
+  DollarSign, LogOut, ChevronRight,   Shield, Images, Layers, Gauge, Factory, Coins,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { readLocalAuth, logout } from "@/lib/api";
+import { logout } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { fetchAdminSession } from "@/lib/admin-auth";
 
 const NAV_ITEMS = [
   { label: "Overview",      path: "/",             icon: LayoutDashboard, exact: true },
@@ -14,6 +15,7 @@ const NAV_ITEMS = [
   { label: "Subscriptions", path: "/subscriptions",icon: CreditCard },
   { label: "Pricing",       path: "/pricing",      icon: DollarSign },
   { label: "API limits",    path: "/rate-limit",   icon: Gauge },
+  { label: "AI usage",      path: "/ai-usage",     icon: Coins },
   { label: "Image Library", path: "/library",      icon: Images },
   { label: "Library Catalog", path: "/library/catalog", icon: Layers },
   { label: "Image Factory", path: "/images/factory", icon: Factory },
@@ -27,20 +29,11 @@ interface AdminLayoutProps {
 
 export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
   const [location] = useLocation();
-  const [ready, setReady] = useState(false);
-  const [authorized, setAuthorized] = useState(false);
-
-  useEffect(() => {
-    const { userType, token } = readLocalAuth();
-    if (!token || userType !== "super_admin") {
-      window.location.href = "/login";
-    } else {
-      setAuthorized(true);
-    }
-    setReady(true);
-  }, []);
-
-  if (!ready || !authorized) return null;
+  const { data: session } = useQuery({
+    queryKey: ["admin-session"],
+    queryFn: fetchAdminSession,
+    staleTime: 60_000,
+  });
 
   function handleLogout() {
     logout();
