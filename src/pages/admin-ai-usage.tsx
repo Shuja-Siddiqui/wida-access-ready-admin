@@ -203,12 +203,22 @@ export default function AdminAiUsage() {
     queryFn: () => apiRequest(`/api/admin/ai-usage/calls?${params}`),
   });
 
-  const { data: sessionsData, isLoading: sessionsLoading } = useQuery<SessionsResponse>({
+  const {
+    data: sessionsData,
+    isLoading: sessionsLoading,
+    isError: sessionsError,
+    error: sessionsErrorDetail,
+  } = useQuery<SessionsResponse>({
     queryKey: ["admin-ai-usage-sessions", sessionsPage],
     queryFn: () => apiRequest(`/api/admin/ai-usage/sessions?page=${sessionsPage}&limit=25`),
   });
 
-  const { data: imageFactoryData, isLoading: imageFactoryLoading } = useQuery<ImageFactoryResponse>({
+  const {
+    data: imageFactoryData,
+    isLoading: imageFactoryLoading,
+    isError: imageFactoryError,
+    error: imageFactoryErrorDetail,
+  } = useQuery<ImageFactoryResponse>({
     queryKey: ["admin-ai-usage-image-factory", imageFactoryPage],
     queryFn: () => apiRequest(`/api/admin/ai-usage/image-factory?page=${imageFactoryPage}&limit=25`),
   });
@@ -351,6 +361,10 @@ export default function AdminAiUsage() {
               <tbody>
                 {sessionsLoading ? (
                   <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>
+                ) : sessionsError ? (
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-destructive text-xs">
+                    Could not load sessions — {(sessionsErrorDetail as Error)?.message ?? "API error"}. Redeploy api-server and run migration 0020.
+                  </td></tr>
                 ) : !sessionsData?.sessions.length ? (
                   <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No sessions with AI usage yet</td></tr>
                 ) : (
@@ -454,6 +468,10 @@ export default function AdminAiUsage() {
               <tbody>
                 {imageFactoryLoading ? (
                   <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>
+                ) : imageFactoryError ? (
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-destructive text-xs">
+                    Could not load image factory jobs — {(imageFactoryErrorDetail as Error)?.message ?? "API error"}. Run <span className="font-mono">npm run db:migrate:all</span> (migration 0020).
+                  </td></tr>
                 ) : !imageFactoryData?.jobs.length ? (
                   <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No image prompt jobs yet</td></tr>
                 ) : (
