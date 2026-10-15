@@ -81,7 +81,7 @@ export default function AdminLogin() {
             </div>
           ))}
           <p className="pt-4 text-white/20 text-xs">
-            ACCESS Ready · Fugees Family Inc. · {new Date().getFullYear()}
+            ACCESS Ready · {new Date().getFullYear()}
           </p>
         </div>
       </div>
