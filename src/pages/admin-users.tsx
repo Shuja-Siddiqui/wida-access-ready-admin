@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/admin-layout";
 import { apiRequest } from "@/lib/api";
 import { Input } from "@/components/ui/input";
-import { Users, ChevronLeft, ChevronRight, Search, CheckCircle, XCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Users, ChevronLeft, ChevronRight, Search, CheckCircle, XCircle, Loader2 } from "lucide-react";
 
 interface AdminUser {
   id: string;
@@ -11,6 +12,7 @@ interface AdminUser {
   email: string;
   role: string;
   email_verified: boolean;
+  has_password?: boolean;
   created_at: string;
 }
 
@@ -56,11 +58,23 @@ function Initials({ name, role }: { name: string; role: string }) {
 }
 
 export default function AdminUsers() {
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [role, setRole] = useState("");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  async function verifyUserEmail(userId: string) {
+    setVerifyingId(userId);
+    try {
+      await apiRequest(`/api/admin/users/${userId}/verify-email`, { method: "POST" });
+      await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+    } finally {
+      setVerifyingId(null);
+    }
+  }
 
   function handleSearchChange(val: string) {
     setSearch(val);
@@ -114,15 +128,15 @@ export default function AdminUsers() {
         {/* Table */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           {/* Head */}
-          <div className="grid grid-cols-[2fr_2fr_1fr_80px_90px] gap-4 px-5 py-2.5 bg-muted/40 border-b border-border">
-            {["Name", "Email", "Role", "Verified", "Joined"].map((h) => (
+          <div className="grid grid-cols-[2fr_2fr_1fr_80px_100px_120px] gap-4 px-5 py-2.5 bg-muted/40 border-b border-border">
+            {["Name", "Email", "Role", "Verified", "Joined", "Actions"].map((h) => (
               <p key={h} className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{h}</p>
             ))}
           </div>
 
           {isLoading ? (
             Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="grid grid-cols-[2fr_2fr_1fr_80px_90px] gap-4 px-5 py-3 border-b border-border last:border-0 animate-pulse">
+              <div key={i} className="grid grid-cols-[2fr_2fr_1fr_80px_100px_120px] gap-4 px-5 py-3 border-b border-border last:border-0 animate-pulse">
                 <div className="flex items-center gap-2.5"><div className="w-8 h-8 rounded-full bg-muted shrink-0" /><div className="h-3.5 bg-muted rounded w-28" /></div>
                 <div className="flex items-center"><div className="h-3 bg-muted rounded w-40" /></div>
                 <div className="flex items-center"><div className="h-5 bg-muted rounded-full w-16" /></div>
@@ -139,7 +153,7 @@ export default function AdminUsers() {
             data.users.map((u) => (
               <div
                 key={u.id}
-                className="grid grid-cols-[2fr_2fr_1fr_80px_90px] gap-4 items-center px-5 py-3 border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                className="grid grid-cols-[2fr_2fr_1fr_80px_100px_120px] gap-4 items-center px-5 py-3 border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Initials name={u.name} role={u.role} />
@@ -154,6 +168,28 @@ export default function AdminUsers() {
                   }
                 </div>
                 <span className="text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString()}</span>
+                <div className="flex items-center">
+                  {!u.email_verified ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs font-medium"
+                      disabled={verifyingId === u.id}
+                      onClick={() => void verifyUserEmail(u.id)}
+                    >
+                      {verifyingId === u.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        "Verify email"
+                      )}
+                    </Button>
+                  ) : u.has_password === false ? (
+                    <span className="text-[10px] text-muted-foreground leading-tight">Verified · needs password at login</span>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">—</span>
+                  )}
+                </div>
               </div>
             ))
           )}
