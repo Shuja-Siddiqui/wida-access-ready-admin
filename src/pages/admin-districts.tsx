@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { AdminLayout } from "@/admin-layout";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -18,8 +18,27 @@ interface District {
   schoolCount?: number | null;
 }
 
-interface DistrictFormState { name: string; state: string; districtCode: string; }
-const EMPTY: DistrictFormState = { name: "", state: "", districtCode: "" };
+interface DistrictFormState {
+  name: string;
+  state: string;
+  districtCode: string;
+  adminName: string;
+  adminEmail: string;
+}
+
+interface CreateDistrictPayload {
+  name: string;
+  state?: string;
+  districtCode?: string;
+  districtAdmin: { name: string; email: string };
+}
+const EMPTY: DistrictFormState = {
+  name: "",
+  state: "",
+  districtCode: "",
+  adminName: "",
+  adminEmail: "",
+};
 
 export default function AdminDistricts() {
   const qc = useQueryClient();
@@ -37,9 +56,25 @@ export default function AdminDistricts() {
   const districts = Array.isArray(raw) ? raw : [];
 
   const createMut = useMutation({
-    mutationFn: (body: Partial<District>) => apiRequest("/api/districts", { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-districts"] }); setFormOpen(false); toast({ title: "District created" }); },
-    onError: () => toast({ title: "Failed to create district", variant: "destructive" }),
+    mutationFn: (body: CreateDistrictPayload) =>
+      apiRequest("/api/districts", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["admin-districts"] });
+      setFormOpen(false);
+      const email = variables.districtAdmin?.email;
+      toast({
+        title: "District created",
+        description: email
+          ? `An invitation email was sent to ${email}.`
+          : undefined,
+      });
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: err instanceof ApiError ? err.message : "Failed to create district",
+        variant: "destructive",
+      });
+    },
   });
   const updateMut = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Partial<District> }) =>
@@ -54,12 +89,41 @@ export default function AdminDistricts() {
   });
 
   function openCreate() { setEditing(null); setForm(EMPTY); setFormOpen(true); }
-  function openEdit(d: District) { setEditing(d); setForm({ name: d.name, state: d.state ?? "", districtCode: d.districtCode ?? "" }); setFormOpen(true); }
+  function openEdit(d: District) {
+    setEditing(d);
+    setForm({ name: d.name, state: d.state ?? "", districtCode: d.districtCode ?? "", adminName: "", adminEmail: "" });
+    setFormOpen(true);
+  }
 
   async function handleSave() {
-    const body = { name: form.name.trim(), state: form.state.trim() || undefined, districtCode: form.districtCode.trim() || undefined };
-    if (!body.name) { toast({ title: "Name is required", variant: "destructive" }); return; }
-    editing ? updateMut.mutate({ id: editing.id, body }) : createMut.mutate(body);
+    const name = form.name.trim();
+    if (!name) { toast({ title: "Name is required", variant: "destructive" }); return; }
+
+    if (editing) {
+      updateMut.mutate({
+        id: editing.id,
+        body: {
+          name,
+          state: form.state.trim() || undefined,
+          districtCode: form.districtCode.trim() || undefined,
+        },
+      });
+      return;
+    }
+
+    const adminName = form.adminName.trim();
+    const adminEmail = form.adminEmail.trim();
+    if (!adminName || !adminEmail) {
+      toast({ title: "District admin name and email are required", variant: "destructive" });
+      return;
+    }
+
+    createMut.mutate({
+      name,
+      state: form.state.trim() || undefined,
+      districtCode: form.districtCode.trim() || undefined,
+      districtAdmin: { name: adminName, email: adminEmail },
+    });
   }
 
   return (
@@ -150,6 +214,21 @@ export default function AdminDistricts() {
                 <Input value={form[key as keyof DistrictFormState]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} placeholder={placeholder} maxLength={maxLength} />
               </div>
             ))}
+            {!editing && (
+              <>
+                <p className="text-xs text-muted-foreground pt-2 border-t border-border">
+                  The district administrator receives an email to set a password and access the district dashboard.
+                </p>
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-1 block">District admin name *</label>
+                  <Input value={form.adminName} onChange={(e) => setForm({ ...form, adminName: e.target.value })} placeholder="Jane Smith" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-1 block">District admin email *</label>
+                  <Input type="email" value={form.adminEmail} onChange={(e) => setForm({ ...form, adminEmail: e.target.value })} placeholder="admin@district.edu" />
+                </div>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
